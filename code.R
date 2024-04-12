@@ -45,49 +45,101 @@ crypto <-
   arrange(date) %>% 
   group_by(coin) %>% 
   mutate(ret = log(close)-log(lag(close)),
+         ret2 = (close - lag(close))/lag(close),
          ret_sqr = ret^2,
          ret_abs = abs(ret),
          hilo = high - low) %>% 
-  ungroup()
-        
+  ungroup() %>% 
+  na.omit()
+
          
   
 #number of coins in given years 
-coins15 <-
-  crypto %>% 
+  crypto %>%
   filter(date == "2015-12-28") %>%
   nrow()
   
-coins17 <- 
   crypto %>% 
   filter(date == "2017-12-25") %>% 
   nrow()
 
-coins19 <- 
-  crypto %>% 
+   crypto %>% 
   filter(date == "2019-12-30") %>% 
   nrow()
 
-coins21 <- 
   crypto %>% 
   filter(date == "2021-12-27") %>% 
   nrow()
 
-coins23 <- 
   crypto %>% 
   filter(date == "2023-12-25") %>% 
   nrow()
 
+# histogram with normal distribution 
+h <- hist(crypto$ret,breaks = 60)
+xfit <- seq(min(crypto$ret), max(crypto$ret), length = 50) 
+yfit <- dnorm(xfit, mean = mean(crypto$ret), sd = sd(crypto$ret)) 
+yfit <- yfit * diff(h$mids[1:2]) * length(crypto$ret) 
+
+lines(xfit, yfit, col = "blue", lwd = 1)
+
+
+  
+  
+# compute market returns per date 
+crypto <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(market = sum(marketCap)) %>% 
+  mutate(weight = marketCap/market) %>% 
+  mutate(market_return = sum(weight*ret))  
+  
+  # compute cumulative product returns 
+btc <- 
+  crypto %>% 
+  filter(coin == "BTC" ) %>%
+  mutate(yield = 1 + ret) %>% 
+  mutate(cumret = cumprod(yield))
+
+# returns plot 
+plot(btc$ret,type = "l")
+
+eth <- 
+  crypto %>% 
+  filter(coin == "ETH") %>%
+  mutate(yield = 1 + ret) %>% 
+  mutate(cumret = cumprod(yield))
+
+plot(eth$ret,type="l")
+
+mkt <- 
+  crypto %>% 
+  filter(coin == "ETH") %>%
+  mutate(yield = 1 + market_return) %>% 
+  mutate(cumret = cumprod(yield)) %>% 
+  select(date,ret,yield,cumret)
+
+plot(mkt$ret,type = "l")
+ 
+# plots --> eth seems wrong  
+ggplot(data = btc, aes(x = date,y=cumret)) +
+  geom_line() 
+
+ggplot(data = eth, aes(x = date,y=cumret)) +
+  geom_line()
+
+ggplot(data = mkt, aes(x = date,y=cumret)) +
+  geom_line()
 
 
 # load in risk free rate 
-risk_free <- as_tibble(read_csv("us_t_bill.csv",col_names = TRUE))
+#risk_free <- as_tibble(read_csv("us_t_bill.csv",col_names = TRUE))
 
 
 # rate is in percent, therefore divide by 100 
-risk_free <- 
-  risk_free %>% 
-  mutate(yield = rate/100)
+#risk_free <- 
+#  risk_free %>% 
+#  mutate(yield = rate/100)
 
 # join risk free with crypto data 
 data <- left_join(crypto, risk_free)
@@ -97,27 +149,13 @@ data <-
   data %>% 
   mutate(excess = ret-yield)
 
-# compute market returns per date 
-data <- 
-  data %>% 
-  group_by(date) %>% 
-  mutate(market = sum(marketCap)) %>% 
-  mutate(weight = marketCap/market) %>% 
-  mutate(market_return = sum(weight*ret)) 
+ 
 
 # plot market returns 
 plot(data$date,data$market_return)
 
-# compute log cumulative product returns 
-test <- 
-  data %>% 
-  group_by(date) %>% 
-  summarise(mean = mean(market_return)) %>% 
-  mutate(mean = 1 + mean) %>% 
-  mutate(cumret = cumprod(mean)) %>% 
-  mutate(lncumprod_crypto = log(cumret))
 
-sp500 <- as_tibble(read_csv("SPX.csv",col_names = TRUE))
+#sp500 <- as_tibble(read_csv("SPX.csv",col_names = TRUE))
 
 #sp500 <- 
 #  sp500 %>% 
@@ -137,15 +175,6 @@ marketreturn <-
   group_by(date) %>% 
   summarise(mean = mean(market_return))
 
-# filter out btc values
-btc <-
-  crypto %>% 
-  filter(coin == "BTC")
-
-# filter out eth   
-eth <- 
-  crypto %>% 
-  filter(coin == "ETH")
 
 # line plot to compare returns 
 plot(x = data$date, y = data$market_return,type="l")
@@ -169,12 +198,6 @@ mean_btc <- mean(btc$ret)
 sd_btc   <- sd(btc$ret)
 skew_btc <- skewness(btc$ret)
 kurt_btc <- kurtosis(btc$ret)
-
-
-
-
-
-
 
 
 # agostino test for skewness 
