@@ -36,7 +36,7 @@ crypto[,3:8] <- lapply(crypto[,3:8],as.numeric)
 # check types: 
 lapply(crypto[], typeof)
 
-#test
+
 
 # compute variables 
 
@@ -52,11 +52,33 @@ crypto <-
         
          
   
- 
-
-
-
+#number of coins in given years 
+coins15 <-
+  crypto %>% 
+  filter(date == "2015-12-28") %>%
+  nrow()
   
+coins17 <- 
+  crypto %>% 
+  filter(date == "2017-12-25") %>% 
+  nrow()
+
+coins19 <- 
+  crypto %>% 
+  filter(date == "2019-12-30") %>% 
+  nrow()
+
+coins21 <- 
+  crypto %>% 
+  filter(date == "2021-12-27") %>% 
+  nrow()
+
+coins23 <- 
+  crypto %>% 
+  filter(date == "2023-12-25") %>% 
+  nrow()
+
+
 
 # load in risk free rate 
 risk_free <- as_tibble(read_csv("us_t_bill.csv",col_names = TRUE))
