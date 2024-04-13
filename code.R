@@ -133,16 +133,18 @@ ggplot(data = mkt, aes(x = date,y=cumret)) +
 
 
 # load in risk free rate 
-#risk_free <- as_tibble(read_csv("us_t_bill.csv",col_names = TRUE))
+rf <- as_tibble(read_csv("DTB3.csv"))
+rf$DTB3 <- as.numeric(rf$DTB3)
 
 
 # rate is in percent, therefore divide by 100 
-#risk_free <- 
-#  risk_free %>% 
-#  mutate(yield = rate/100)
+rf <- 
+  rf %>% 
+  mutate(yield = DTB3/100) %>% 
+  rename(date = DATE)
 
 # join risk free with crypto data 
-data <- left_join(crypto, risk_free)
+data <- left_join(crypto, rf)
 
 # compute excess return               
 data <- 
@@ -151,18 +153,16 @@ data <-
 
  
 
-# plot market returns 
-plot(data$date,data$market_return)
+
+# sp500 data 
+spx <- as_tibble(read_csv("SPX.csv",col_names = TRUE))
+spx <- 
+  spx %>% 
+  mutate(ret = log(Close) - log(lag(Close)),
+         yield = 1 + ret,
+         cumret = cumprod(yield))
 
 
-#sp500 <- as_tibble(read_csv("SPX.csv",col_names = TRUE))
-
-#sp500 <- 
-#  sp500 %>% 
-#  mutate(yield = 1 + ret) %>% 
-#  mutate(cumprod = cumprod(yield)) %>% 
-#  mutate(lncumprod_sp = log(cumprod)) %>% 
-#  rename(date = observation_date)
 
 test2 <- left_join(test,sp500)
 
@@ -215,9 +215,6 @@ jarque.test(marketreturn$mean)
 test = Winsorize(data$ret,maxval = 5)
 
 
-
-
-# market factor 
 
 
 
