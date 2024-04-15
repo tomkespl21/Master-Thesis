@@ -205,7 +205,6 @@ ggplot(data = mkt, aes(x = date,y=cumret)) +
 
 
 
-
 # load in risk free rate 
 rf <- as_tibble(read_csv("DTB3.csv"))
 rf$DTB3 <- as.numeric(rf$DTB3)
@@ -218,6 +217,32 @@ rf <-
 
 # join risk free with crypto data 
 data <- left_join(crypto, rf)
+
+
+
+
+############ portfolio sorting ######################
+
+
+# size and volume and volatility
+
+crypto <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quant_size = ntile(marketCap,5),
+         quant_volume = ntile(volume,5),
+         quant_vola = ntile(ret_sqr,5)) 
+
+
+
+
+
+
+
+
+
+
+
 
 
 
