@@ -47,7 +47,9 @@ crypto <-
          ret2 = (close - lag(close))/lag(close),
          ret_sqr = ret^2,
          ret_abs = abs(ret),
-         hilo = high - low) %>% 
+         hilo = high - low,
+         lag_ret = lag(ret),
+         lag_size = lag(marketCap))%>% 
   ungroup() %>% 
   na.omit()
 
@@ -89,17 +91,17 @@ crypto <-
   # compute cumulative product returns 
 btc <- 
   crypto %>% 
-  filter(coin == "BTC" ) %>%
-  mutate(yield = 1 + ret) %>% 
-  mutate(cumret = cumprod(yield))
+  filter(coin == "BTC" ) #%>% 
+#  mutate(yield = 1 + ret) %>% 
+#  mutate(cumret = cumprod(yield))
 
 
 
 eth <- 
   crypto %>% 
-  filter(coin == "ETH") %>%
-  mutate(yield = 1 + ret) %>% 
-  mutate(cumret = cumprod(yield))
+  filter(coin == "ETH") # %>%
+#  mutate(yield = 1 + ret) %>% 
+#  mutate(cumret = cumprod(yield))
 
 
 
@@ -128,7 +130,7 @@ spx <-
 
 
 
-test2 <- left_join(test,sp500)
+#test2 <- left_join(test,sp500)
 
 
 
@@ -206,17 +208,17 @@ ggplot(data = mkt, aes(x = date,y=cumret)) +
 
 
 # load in risk free rate 
-rf <- as_tibble(read_csv("DTB3.csv"))
-rf$DTB3 <- as.numeric(rf$DTB3)
+#rf <- as_tibble(read_csv("DTB3.csv"))
+#rf$DTB3 <- as.numeric(rf$DTB3)
 
 # rate is in percent, therefore divide by 100 
-rf <- 
-  rf %>% 
-  mutate(yield = DTB3/100) %>% 
-  rename(date = DATE)
+#rf <- 
+#  rf %>% 
+#  mutate(yield = DTB3/100) %>% 
+#  rename(date = DATE)
 
 # join risk free with crypto data 
-data <- left_join(crypto, rf)
+#data <- left_join(crypto, rf)
 
 
 
@@ -229,9 +231,28 @@ data <- left_join(crypto, rf)
 crypto <- 
   crypto %>% 
   group_by(date) %>% 
-  mutate(quant_size = ntile(marketCap,5),
-         quant_volume = ntile(volume,5),
-         quant_vola = ntile(ret_sqr,5)) 
+  mutate(quant_size = ntile(lag_size,5))
+
+
+size_portfolio <- 
+  crypto %>% 
+  group_by(date, quant_size) %>% 
+  mutate(mean_size = mean(ret)) %>%
+  ungroup(date) %>% 
+  summarise(mean= mean(mean_size)) 
+
+tstat <- 
+  crypto %>% 
+  group_by(date, quant_size) %>% 
+  mutate(mean_size = mean(ret))  
+
+tstat <- tstat[tstat$quant_size ==5,]
+  
+
+t.test(tstat$mean_size)
+
+  
+
 
 
 
