@@ -49,7 +49,9 @@ crypto <-
          ret_abs = abs(ret),
          hilo = high - low,
          lag_ret = lag(ret),
-         lag_size = lag(marketCap))%>% 
+         lag_size = lag(marketCap),
+         lag_volume = lag(volume),
+         lag_vol = lag(ret_sqr))%>% 
   ungroup() %>% 
   na.omit()
 
@@ -226,32 +228,217 @@ ggplot(data = mkt, aes(x = date,y=cumret)) +
 ############ portfolio sorting ######################
 
 
-# size and volume and volatility
+## size long short portfolio
 
-crypto <- 
+# sort coins into quantiles by lagged size 
+size_data <- 
   crypto %>% 
   group_by(date) %>% 
-  mutate(quant_size = ntile(lag_size,5))
+  mutate(quantiles = ntile(lag_size,5)) %>% 
+  select(date,coin,ret,quantiles)
 
-
-size_portfolio <- 
-  crypto %>% 
-  group_by(date, quant_size) %>% 
-  mutate(mean_size = mean(ret)) %>%
+# summarize mean returns of quantile portfolios
+mean_ret_size <- 
+  size_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>%
   ungroup(date) %>% 
-  summarise(mean= mean(mean_size)) 
+  summarise(mean= mean(ret_portf)) 
 
-tstat <- 
+
+size_data2 <- 
+  size_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(size_data2$ret_portf[size_data2$quantiles == i]))
+}
+
+  
+## momentum long short portfolio
+
+# sort coins into quantiles by lagged size 
+mom_data <- 
   crypto %>% 
-  group_by(date, quant_size) %>% 
-  mutate(mean_size = mean(ret))  
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_ret,5)) %>% 
+  select(date,coin,ret,quantiles)
 
-tstat <- tstat[tstat$quant_size ==5,]
+# summarize mean returns of quantile portfolios
+mean_ret_mom <- 
+  mom_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>%
+  ungroup(date) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+mom_data2 <- 
+  mom_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(mom_data2$ret_portf[mom_data2$quantiles == i]))
+}
+
+
+
+## volume long short portfolio
+
+# sort coins into quantiles by lagged size 
+volume_data <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_volume,5)) %>% 
+  select(date,coin,ret,quantiles)
+
+# summarize mean returns of quantile portfolios
+mean_ret_volume <- 
+  volume_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>%
+  ungroup(date) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+volume_data2 <- 
+  volume_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(volume_data2$ret_portf[volume_data2$quantiles == i]))
+}
+
+
+## volatility long short portfolio
+
+# sort coins into quantiles by lagged size 
+vol_data <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_vol,5)) %>% 
+  select(date,coin,ret,quantiles)
+
+# summarize mean returns of quantile portfolios
+mean_ret_vol <- 
+  vol_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>%
+  ungroup(date) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+vol_data2 <- 
+  vol_data %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(vol_data2$ret_portf[vol_data2$quantiles == i]))
+}
+
+
+########## Fama Macbeth #########################
+
+
+# Routine computes FMB estimators with Shanken covariance matrix
+# R asset returns
+# X Factors
+# Choose c=0 to drop constant in second stage
+FMB <- function(R,X, c){
   
-
-t.test(tstat$mean_size)
-
+  X <- as.matrix(X)
+  R <- as.matrix(R)
   
+  N <- dim(R)[2] #Number of assets
+  K <- dim(X)[2]
+  T <- dim(R)[1]
+  
+  # TimeSeries Regression
+  TSmodel <- lm(R~X)
+  residvar <- colMeans(TSmodel$residuals^2)
+  
+  if(c ==0){
+    
+    Betas <- t(as.matrix(TSmodel$coefficients[2:(K+1),]))
+    Means <- as.matrix(colMeans(R))
+    
+    if(K==1){Betas <- t(Betas)}
+    colnames(Betas) <- colnames(X)
+    
+    # CrossSection Regression
+    CSmodel <- lm(Means ~ Betas-1)
+    
+    # Shanken Errors
+    Sigma <- cov(TSmodel$residuals)
+    Sigmaf <- cov(X)
+    gamma <- as.matrix(CSmodel$coefficients)
+    c <- t(gamma)%*%solve(Sigmaf)%*%gamma
+    B <- solve(t(Betas)%*%Betas)%*%t(Betas)
+    Omega <- B%*%Sigma%*%t(B)
+    
+    CM <- (as.double(1+c)*Omega+Sigmaf)/T
+    
+    # Compute Pricing Error
+    MAPE <- t(1/residvar)%*%abs(CSmodel$residuals)/N
+    
+  }
+  
+  else{
+    
+    Betas <- t(as.matrix(TSmodel$coefficients[2:(K+1),]))
+    Means <- as.matrix(colMeans(R))
+    
+    if(K==1){Betas <- t(Betas)}
+    
+    
+    # CrossSection Regression
+    CSmodel <- lm(Means ~ Betas)
+    
+    # Shanken Errors
+    Sigma <- cov(TSmodel$residuals)
+    Sigmaf <- cov(X)
+    gamma <- as.matrix(CSmodel$coefficients[2:(K+1)])
+    c <- t(gamma)%*%solve(Sigmaf)%*%gamma
+    Betas <- cbind(1,Betas)
+    B <- solve(t(Betas)%*%Betas)%*%t(Betas)
+    Omega <- B%*%Sigma%*%t(B)
+    
+    # Create bordered matrix
+    Sigmaf <- rbind(matrix(0,1,K),Sigmaf)
+    Sigmaf <- cbind(matrix(0,(K+1),1),Sigmaf)
+    
+    CM <- (as.double(1+c)*Omega+Sigmaf)/T
+    
+    # Compute Pricing Error
+    MAPE <- abs(CSmodel$coefficients[1]) +  t(1/residvar)%*%abs(CSmodel$residuals)/N
+  }
+  
+  
+  
+  results <- list(TS = TSmodel, CS = CSmodel, Shanken = CM, MAPE = MAPE)
+  return(results)
+  
+}
+
+
+
+
+
+
+
+
 
 
 
