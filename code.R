@@ -249,7 +249,7 @@ mean_ret_size <-
 size_data2 <- 
   size_data %>% 
   group_by(date, quantiles) %>% 
-  mutate(ret_portf = mean(ret)) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
@@ -279,7 +279,7 @@ mean_ret_mom <-
 mom_data2 <- 
   mom_data %>% 
   group_by(date, quantiles) %>% 
-  mutate(ret_portf = mean(ret)) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
@@ -310,7 +310,7 @@ mean_ret_volume <-
 volume_data2 <- 
   volume_data %>% 
   group_by(date, quantiles) %>% 
-  mutate(ret_portf = mean(ret)) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
@@ -332,7 +332,7 @@ vol_data <-
 mean_ret_vol <- 
   vol_data %>% 
   group_by(date, quantiles) %>% 
-  mutate(ret_portf = mean(ret)) %>%
+  summarise(ret_portf = mean(ret)) %>%
   ungroup(date) %>% 
   summarise(mean= mean(ret_portf)) 
 
@@ -340,7 +340,7 @@ mean_ret_vol <-
 vol_data2 <- 
   vol_data %>% 
   group_by(date, quantiles) %>% 
-  mutate(ret_portf = mean(ret)) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
@@ -391,7 +391,7 @@ FMB <- function(R,X, c){
     CM <- (as.double(1+c)*Omega+Sigmaf)/T
     
     # Compute Pricing Error
-    MAPE <- t(1/residvar)%*%abs(CSmodel$residuals)/N
+    #MAPE <- t(1/residvar)%*%abs(CSmodel$residuals)/N
     
   }
   
@@ -422,16 +422,84 @@ FMB <- function(R,X, c){
     CM <- (as.double(1+c)*Omega+Sigmaf)/T
     
     # Compute Pricing Error
-    MAPE <- abs(CSmodel$coefficients[1]) +  t(1/residvar)%*%abs(CSmodel$residuals)/N
+    #MAPE <- abs(CSmodel$coefficients[1]) +  t(1/residvar)%*%abs(CSmodel$residuals)/N
   }
   
   
   
-  results <- list(TS = TSmodel, CS = CSmodel, Shanken = CM, MAPE = MAPE)
+  results <- list(TS = TSmodel, CS = CSmodel, Shanken = CM)
   return(results)
   
 }
 
+# create Return matrix 
+R <- 
+  crypto %>% 
+  group_by(coin,date) %>% 
+  select(date,coin,ret) %>% 
+  mutate(id = row_number()) %>% 
+  pivot_wider(names_from = coin,values_from = ret) 
+
+# drop row 313 
+R <- R[-313,]
+
+R <- as.matrix(R[,3:54])
+
+
+
+# compute size factor 
+small <- 
+  size_data2 %>% 
+  filter(quantiles == 1)  
+  
+
+big <- 
+  size_data2 %>% 
+  filter(quantiles == 5)
+
+SMB = as.vector(small$ret_portf - big$ret_portf)
+
+# momentum factor 
+bull <- 
+  mom_data2 %>% 
+  filter(quantiles == 5)
+
+bear <- 
+  mom_data2 %>% 
+  filter(quantiles == 1 )
+
+MOM <- bull$ret_portf - bear$ret_portf
+
+# Volume factor 
+alot <- 
+  volume_data2 %>% 
+  filter(quantiles == 5)
+
+ few <- 
+  volume_data2 %>% 
+  filter(quantiles == 1)
+
+AMF <- alot$ret_portf - few$ret_portf
+
+# volatility factor 
+high <- 
+  vol_data2 %>% 
+  filter(quantiles == 5)
+
+low <- 
+  vol_data2 %>% 
+  filter(quantiles == 1)
+
+HML <- high$ret_portf - low$ret_portf
+
+X = cbind(SMB,MOM,AMF,HML)
+
+
+FMB(R,X,0)
+
+
+
+########## Freyberger et. al. ############################
 
 
 
@@ -447,6 +515,32 @@ FMB <- function(R,X, c){
 
 
 
+
+
+
+
+
+
+############### Factor models ##################################
+
+
+# 1 Factor model (CAPM)
+
+reg1 <- lm(crypto$ret ~ crypto$market_return)
+
+summary(reg1)
+
+
+# 3 Factor model: RET = MKT + SMB + MOM 
+
+
+# 5 Factor model: RET = MKT + SMB + MOM + VOLATILITY + VOLUME 
+
+
+
+
+
+# Principal Component factor model : 
 
 
 
