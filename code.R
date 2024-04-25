@@ -6,10 +6,11 @@
 rm(list=ls())
 
 # libraries 
-library("tidyverse")
+library("tidyverse")  
 library("DescTools")  # for winsorizing 
-library("readxl")
-library("moments")
+library("readxl")     # self explanatory
+library("moments")    # self explanatory
+library("envalysis") # publishable graphs 
  
 
 
@@ -184,12 +185,7 @@ yfit <- yfit * diff(h$mids[1:2]) * length(crypto$ret)
 lines(xfit, yfit, col = "blue", lwd = 1)
 
 
-# time series returns 
-# make one plot out of these ! 
-plot(btc$ret,type = "l")
-plot(eth$ret,type="l")
-plot(mkt$mkt_ret,type = "l")
-plot(spx$spx_ret,type="l")
+
 
 
 btc$date <- ymd(btc$date)
@@ -204,7 +200,40 @@ spx$mktret <- mkt$mkt_cumret
 ggplot(spx,aes(x=date))+
   geom_line(aes(y=btcret),color="darkred")+
   geom_line(aes(y=mktret),color="steelblue")+
-  geom_line(aes(y=spx_cumret),color="chartreuse4")
+  geom_line(aes(y=spx_cumret),color="chartreuse4")+
+  labs(
+    title = "Comparison Cumulative Returns",
+    #subtitle = 
+    caption = "Sum of logarithmic returns of BTC,SP500 and crypto-market portfolio",
+    x = "Date",
+    y = "Return") +
+  theme_publish()
+
+# time series returns 
+# make one plot out of these ! 
+
+# make same ret axis ! 
+
+p1 <- ggplot(data=btc,aes(x=date,y=ret))+
+             geom_line()+
+             theme_publish()
+
+p2 <- ggplot(data=eth,aes(x=date,y=ret))+
+             geom_line()+
+             theme_publish()
+
+p3 <- ggplot(data=mkt,aes(x=date,y=mkt_ret))+
+             geom_line()+
+             theme_publish()
+
+p4 <- ggplot(data=spx,aes(x=date,y=spx_ret))+
+             geom_line()+
+             theme_publish()
+
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+
 
 
 
