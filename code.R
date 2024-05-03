@@ -193,7 +193,7 @@ eth$date <- ymd(eth$date)
 mkt$date <- ymd(mkt$date)
 spx$date <- ymd(spx$date)
 
-spx <- spx[-3,]
+spx <- spx[-4,]
 spx$btcret <- btc$cumret
 spx$mktret <- mkt$mkt_cumret
 
