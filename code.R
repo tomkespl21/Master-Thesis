@@ -47,18 +47,19 @@ crypto <-
   crypto %>% 
   arrange(date) %>% 
   group_by(coin) %>% 
-  mutate(lnret = log(close)-log(lag(close)),
-         ret = (close - lag(close))/lag(close),
-         ret_sqr = ret^2,
-         ret_abs = abs(ret),
-         hilo = high - low,
-         lag_ret = lag(ret),
-         lag_ret2 = lag(lag_ret),
-         lag_size = lag(marketCap),
-         lag_volume = lag(volume),
-         lag_vol = lag(ret_sqr))%>% 
+  mutate(lnret = log(close)-log(lag(close)),     # log returns 
+         ret = (close - lag(close))/lag(close),  # weekly returns 
+         ret_sqr = ret^2,                        # return squared 
+         ret_abs = abs(ret),                     # |return| 
+         hilo = high - low,                      # daily highest ret - lowest ret 
+         lag_ret = lag(ret),                     # ret last week
+         lag_ret2 = lag(lag_ret),                # ret 2 weeks ago
+         lag_ret3 = lag(lag_ret2),               # ret 3 weeks ago
+         lag_size = lag(marketCap),              # size last week
+         lag_volume = lag(volume),               # volume last week
+         lag_vol = lag(ret_sqr))%>%              # approx. volatility last week
   ungroup() %>% 
-  na.omit()
+  na.omit()                                      # delete Na  
 
          
   
@@ -91,9 +92,9 @@ crypto <-
 crypto <- 
   crypto %>% 
   group_by(date) %>% 
-  mutate(market = sum(marketCap),
-         weight = marketCap/market,  
-         mkt_ret = sum(weight*ret),
+  mutate(market = sum(marketCap),     # proxy for marketcap
+         weight = marketCap/market,   # weight of each coin
+         mkt_ret = sum(weight*ret),   # weekly market return
          ln_mkt_ret = sum(weight*lnret))
   
 
@@ -109,7 +110,7 @@ eth$cumret <- cumsum(eth$lnret)
 
 
 
-# creat market variable
+# create market variable
 mkt <- crypto[crypto$coin == "BTC",] # to get mkt once for all dates
 mkt$mkt_cumret <- cumsum(mkt$ln_mkt_ret)
 mkt$mkt_ret_sqr = mkt$mkt_ret^2
@@ -124,7 +125,8 @@ spx <- as_tibble(read_csv("SPX.csv",col_names = TRUE))
 spx <- 
   spx %>% 
   mutate(spx_lnret = log(Close) - log(lag(Close)),
-         spx_ret = (Close - lag(Close))/lag(Close)) %>% 
+         spx_ret = (Close - lag(Close))/lag(Close),
+         lag_spx = lag(spx_ret)) %>% 
   na.omit() %>% 
   mutate(spx_cumret = cumsum(spx_lnret)) %>% 
   rename(date = Date)
@@ -132,7 +134,6 @@ spx <-
 spx$date <- as.character(spx$date)
 
 test <- left_join(crypto,spx)
-
 
 
 
@@ -236,22 +237,39 @@ p4 <- ggplot(data=spx,aes(x=date,y=spx_ret))+
 grid.arrange(p1,p2,p3,p4,ncol=2)
 
 
+### join other data  
+
+# load in risk free rate (t-bill used as proxy freom FRED)
+rf <- as_tibble(read_csv("DTB3.csv"))
+rf$DTB3 <- as.numeric(rf$DTB3) 
 
 
-
-
-# load in risk free rate 
-#rf <- as_tibble(read_csv("DTB3.csv"))
-#rf$DTB3 <- as.numeric(rf$DTB3)
 
 # rate is in percent, therefore divide by 100 
-#rf <- 
-#  rf %>% 
-#  mutate(yield = DTB3/100) %>% 
-#  rename(date = DATE)
+rf <- 
+  rf %>% 
+  mutate(yield = DTB3/100) %>% 
+  rename(date = DATE) %>% 
+  na.omit() 
+   
+  
+
+
+rf$date <- as.character(rf$date) # for joining 
+
+
 
 # join risk free with crypto data 
-#data <- left_join(crypto, rf)
+data <- left_join(crypto, rf)
+
+# fill up NAs 
+data <- 
+  data %>% 
+  fill(DTB3) %>%   # fills up with previous values by default
+  fill(yield)
+
+
+
 
 
 
@@ -527,7 +545,17 @@ FMB(R,X,0)
 
 
 
-########## Elastic Net and Lasso ############################
+##########  Lasso ############################
+
+Y = as.vector(crypto$ret)
+X = cbind(crypto$volume,crypto$hilo,crypto$lag_ret,
+          crypto$lag_ret2,crypto$lag_vol,crypto$mkt_ret,crypto$SMB,crypto$MOM)
+
+x = model.matrix(Y~X)
+lasso1 <- glmnet(x = X , y=Y , alpha = 1)
+lasso2 <- cv.glmnet(as.matrix(x),Y,alpha=1)
+coef.glmnet(lasso1)
+as.matrix(coef(lasso1, lasso1$lambda.min))
 
 
 ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
@@ -542,8 +570,6 @@ ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
   variables<-variables[!(variables %in% '(Intercept)')];
   return( c(yvar,variables));
 }
-
-
 
 
 
@@ -579,18 +605,19 @@ summary(reg2)
 ############## Principal Component Regression ################
 
 
-#returns.pca <- prcomp(R, center = TRUE, scale. = TRUE)
-
-#summary(returns.pca)
-#pcafactors <- as.matrix(returns.pca$x)
+returns.pca <- prcomp(Y, center = TRUE, scale. = TRUE)
+summary(returns.pca)
+pcafactors <- as.matrix(returns.pca$x)
 
 #print(cor(DOL,pcafactors[,1]))
 #print(cor(HML,pcafactors[,2]))
 
-pcr_model <- pcr()
+pcr_model <- pcr(Y~X,scale = TRUE, validation = "CV")
+
+lm(X~pcafactors[1:5])
 
 
-
+summary(pcr_model)
 
 
 
