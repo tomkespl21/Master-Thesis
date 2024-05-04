@@ -52,9 +52,12 @@ crypto <-
          ret_sqr = ret^2,                        # return squared 
          ret_abs = abs(ret),                     # |return| 
          hilo = high - low,                      # daily highest ret - lowest ret 
+         prc  = log(close),                      # log(closing price)
+         prcvol = log(close * volume),            # obvious 
          lag_ret = lag(ret),                     # ret last week
          lag_ret2 = lag(lag_ret),                # ret 2 weeks ago
          lag_ret3 = lag(lag_ret2),               # ret 3 weeks ago
+         lag_prc  = lag(prc)     ,               # log(prc) last week 
          lag_size = lag(marketCap),              # size last week
          lag_volume = lag(volume),               # volume last week
          lag_vol = lag(ret_sqr))%>%              # approx. volatility last week
@@ -269,9 +272,9 @@ data <-
   fill(yield)
 
 
+# macroeconomic data 
 
-
-
+# 
 
 
 ############ portfolio sorting ######################
