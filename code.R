@@ -11,6 +11,8 @@ library("DescTools")  # for winsorizing
 library("readxl")     # self explanatory
 library("moments")    # self explanatory
 library("envalysis") # publishable graphs 
+library("glmnet")    # lasso 
+library("pls")
  
 
 
@@ -54,7 +56,7 @@ crypto <-
          lag_ret2 = lag(lag_ret),
          lag_size = lag(marketCap),
          lag_volume = lag(volume),
-         lag_vola = lag(ret_sqr))%>% 
+         lag_vol = lag(ret_sqr))%>% 
   ungroup() %>% 
   na.omit()
 
@@ -477,33 +479,21 @@ R <- as.matrix(R[,3:54])
 
 
 # compute size factor
-# sort coins into quantiles by lagged size 
+# sort coins into quantiles by size at time t (not lagged)
 size_t <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(marketCap,5)) %>% 
-  select(date,coin,ret,quantiles)
-
-# summarize mean returns of quantile portfolios
-mean_ret_size <- 
-  size_data %>% 
-  group_by(date, quantiles) %>% 
-  mutate(ret_portf = mean(ret)) %>%
-  ungroup(date) %>% 
-  summarise(mean= mean(ret_portf)) 
-
-
-size_data2 <- 
-  size_data %>% 
-  group_by(date, quantiles) %>% 
+  select(date,coin,ret,quantiles) %>% 
+  group_by(date,quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 
+
 SMB <- 
-  crypto %>% 
+  size_t %>% 
   group_by(date) %>% 
-  mutate(quantiles = ntile(marketCap,5))
   summarise(SMB = ret_portf[quantiles == 1] - ret_portf[quantiles == 5]) # long: small size ; short: large size
 
 crypto <- left_join(crypto,SMB)
@@ -537,19 +527,21 @@ FMB(R,X,0)
 
 
 
-########## Freyberger et. al. ############################
+########## Elastic Net and Lasso ############################
 
 
-
-
-
-
-
-
-
-
-
-
+ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
+  x<-model.matrix(as.formula(paste(yvar,"~.")),data=df)
+  x=x[,-1] ##remove intercept
+  
+  glmnet1<-glmnet::cv.glmnet(x=x,y=df[,yvar],type.measure='mse',nfolds=folds,alpha=alpha)
+  
+  co<-coef(glmnet1,s = "lambda.1se")
+  inds<-which(co!=0)
+  variables<-row.names(co)[inds]
+  variables<-variables[!(variables %in% '(Intercept)')];
+  return( c(yvar,variables));
+}
 
 
 
@@ -584,7 +576,18 @@ summary(reg2)
 
 
 
-# Principal Component factor model : 
+############## Principal Component Regression ################
+
+
+#returns.pca <- prcomp(R, center = TRUE, scale. = TRUE)
+
+#summary(returns.pca)
+#pcafactors <- as.matrix(returns.pca$x)
+
+#print(cor(DOL,pcafactors[,1]))
+#print(cor(HML,pcafactors[,2]))
+
+pcr_model <- pcr()
 
 
 
