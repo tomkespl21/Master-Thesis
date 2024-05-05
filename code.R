@@ -105,6 +105,9 @@ crypto <-
 # use the summability of log-returns
 btc <- crypto[crypto$coin=="BTC",]
 btc$cumret <- cumsum(btc$lnret)
+# compute btc share of the market
+btc$dominance <- btc$marketCap/btc$market
+
 
 
 eth <- crypto[crypto$coin=="ETH",]
@@ -117,7 +120,7 @@ eth$cumret <- cumsum(eth$lnret)
 mkt <- crypto[crypto$coin == "BTC",] # to get mkt once for all dates
 mkt$mkt_cumret <- cumsum(mkt$ln_mkt_ret)
 mkt$mkt_ret_sqr = mkt$mkt_ret^2
-mkt <- mkt[,c(1,19,21:24)]
+mkt <- mkt[,c(1,24,26:29)]
 
 
 
@@ -193,13 +196,12 @@ lines(xfit, yfit, col = "blue", lwd = 1)
 
 
 
-
 btc$date <- ymd(btc$date)
 eth$date <- ymd(eth$date)
 mkt$date <- ymd(mkt$date)
 spx$date <- ymd(spx$date)
 
-spx <- spx[-4,]
+spx <- spx[-c(1,2),]
 spx$btcret <- btc$cumret
 spx$mktret <- mkt$mkt_cumret
 
@@ -526,8 +528,6 @@ MOM <-
   summarise(MOM = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
 
 crypto <- left_join(crypto,MOM)
-
-
 
 
 # volatility factor 
