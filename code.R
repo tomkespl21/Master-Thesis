@@ -89,7 +89,6 @@ crypto <-
 
 
 
-
   
 # compute market returns per date 
 crypto <- 
@@ -406,7 +405,7 @@ FMB <- function(R,X, c){
     CM <- (as.double(1+c)*Omega+Sigmaf)/T
     
     # Compute Pricing Error
-    #MAPE <- abs(CSmodel$coefficients[1]) +  t(1/residvar)%*%abs(CSmodel$residuals)/N
+    MAPE <- abs(CSmodel$coefficients[1]) +  t(1/residvar)%*%abs(CSmodel$residuals)/N
   }
   
   
@@ -456,8 +455,8 @@ crypto <- left_join(crypto,SMB)
 
 
 
-# momentum factor 
-momentum <- 
+# momentum factor lag 1 
+momentum1 <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(lag_ret,5)) %>% 
@@ -468,13 +467,32 @@ momentum <-
 
 
 # sort coins into quantiles by lagged size 
-MOM <- 
-  momentum %>% 
+MOM1 <- 
+  momentum1 %>% 
   group_by(date) %>% 
-  summarise(MOM = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
+  summarise(MOM1 = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
 
-crypto <- left_join(crypto,MOM)
+crypto <- left_join(crypto,MOM1)
 
+
+# momentum factor lag 2 
+momentum2 <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_ret2,5)) %>% 
+  select(date,coin,ret,quantiles) %>% 
+  group_by(date,quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+
+# sort coins into quantiles by lagged size 
+MOM2 <- 
+  momentum2 %>% 
+  group_by(date) %>% 
+  summarise(MOM2 = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
+
+crypto <- left_join(crypto,MOM2)
 
 
 # HILO volatiliy factor
@@ -523,6 +541,7 @@ crypto <- left_join(crypto,YMO)
 X = as.matrix(cbind(SMB[,2],MOM[,2],HML[,2],YMO[,2]))
 
 
+# run Fama Macbeth regressions
 FMB(R[,1:17],X,0)
 
 
