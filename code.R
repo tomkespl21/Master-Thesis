@@ -60,7 +60,9 @@ crypto <-
          lag_prc  = lag(prc)     ,               # log(prc) last week 
          lag_size = lag(marketCap),              # size last week
          lag_volume = lag(volume),               # volume last week
-         lag_vol = lag(ret_sqr))%>%              # approx. volatility last week
+         lag_vol = lag(ret_sqr),
+         lag_hilo = lag(hilo),
+         lag_age = lag(age))%>%              # approx. volatility last week
   ungroup() %>% 
   na.omit()                                      # delete Na  
 
@@ -119,7 +121,7 @@ eth$cumret <- cumsum(eth$lnret)
 mkt <- crypto[crypto$coin == "BTC",] # to get mkt once for all dates
 mkt$mkt_cumret <- cumsum(mkt$ln_mkt_ret)
 mkt$mkt_ret_sqr = mkt$mkt_ret^2
-mkt <- mkt[,c(1,24,26:29)]
+mkt <- mkt[,c(1,26,28:31)]
 
 
 
@@ -332,7 +334,7 @@ grid.arrange(p1,p2,p3,p4,ncol=2)
 
 
 
-########## Fama Macbeth #########################
+####################### Fama Macbeth #########################################################
 
 
 # Routine computes FMB estimators with Shanken covariance matrix
@@ -425,7 +427,8 @@ R <-
   select(date,coin,excess) %>% 
   mutate(id = row_number()) %>% 
   pivot_wider(names_from = coin,values_from = excess) %>% 
-  filter(id == 1 )
+  filter(id == 1 ) #%>% 
+  #mutate_all(funs(ifelse(is.na(.), 0, .)))
   
 
 R <- as.matrix(R[,3:126])
@@ -538,7 +541,7 @@ crypto <- left_join(crypto,YMO)
 
 
 
-X = as.matrix(cbind(SMB[,2],MOM[,2],HML[,2],YMO[,2]))
+X = as.matrix(cbind(SMB[,2],MOM1[,2],MOM2[,2],HML[,2],YMO[,2]))
 
 
 # run Fama Macbeth regressions
@@ -547,13 +550,13 @@ FMB(R[,1:17],X,0)
 
 
 
-############ portfolio sorting ######################
+################################# Portfolio Sorting ################################################
 
 
 ## size long short portfolio
 
 # sort coins into quantiles by lagged size 
-size_data <- 
+size_sort <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(lag_size,5)) %>% 
@@ -561,27 +564,28 @@ size_data <-
 
 # summarize mean returns of quantile portfolios
 mean_ret_size <- 
-  size_data %>% 
+  size_sort %>% 
   group_by(date, quantiles) %>% 
   mutate(ret_portf = mean(ret)) %>%
   ungroup(date) %>% 
   summarise(mean= mean(ret_portf)) 
 
 
-size_data2 <- 
-  size_data %>% 
+# compute mean returns per portfolio per date
+size_sort2 <- 
+  size_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
 for(i in 1:5){
-  print(t.test(size_data2$ret_portf[size_data2$quantiles == i]))
+  print(t.test(size_sort2$ret_portf[size_sort2$quantiles == i]))
 }
 
   
 ## momentum long short portfolio
-mom_data <- 
+mom_sort <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(lag_ret,5)) %>% 
@@ -590,15 +594,15 @@ mom_data <-
 
 # summarize mean returns of quantile portfolios
 mean_ret_mom <- 
-  mom_data %>% 
+  mom_sort %>% 
   group_by(date, quantiles) %>% 
   mutate(ret_portf = mean(ret)) %>%
   ungroup(date) %>% 
   summarise(mean= mean(ret_portf)) 
 
 
-mom_data2 <- 
-  mom_data %>% 
+mom_sort2 <- 
+  mom_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
@@ -607,7 +611,7 @@ mom_data2 <-
 
 # t-tests
 for(i in 1:5){
-  print(t.test(mom_data2$ret_portf[mom_data2$quantiles == i]))
+  print(t.test(mom_sort2$ret_portf[mom_sort2$quantiles == i]))
 }
 
 
@@ -615,7 +619,7 @@ for(i in 1:5){
 ## volume long short portfolio
 
 # sort coins into quantiles by lagged size 
-volume_data <- 
+volume_sort <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(lag_volume,5)) %>% 
@@ -623,29 +627,29 @@ volume_data <-
 
 # summarize mean returns of quantile portfolios
 mean_ret_volume <- 
-  volume_data %>% 
+  volume_sort %>% 
   group_by(date, quantiles) %>% 
   mutate(ret_portf = mean(ret)) %>%
   ungroup(date) %>% 
   summarise(mean= mean(ret_portf)) 
 
 
-volume_data2 <- 
-  volume_data %>% 
+volume_sort2 <- 
+  volume_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
 for(i in 1:5){
-  print(t.test(volume_data2$ret_portf[volume_data2$quantiles == i]))
+  print(t.test(volume_sort2$ret_portf[volume_sort2$quantiles == i]))
 }
 
 
 ## volatility long short portfolio
 
 # sort coins into quantiles by lagged size 
-vol_data <- 
+vol_sort <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(lag_vol,5)) %>% 
@@ -653,25 +657,80 @@ vol_data <-
 
 # summarize mean returns of quantile portfolios
 mean_ret_vol <- 
-  vol_data %>% 
+  vol_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>%
-  ungroup(date) %>% 
+  group_by(quantiles) %>% 
   summarise(mean= mean(ret_portf)) 
 
 
-vol_data2 <- 
-  vol_data %>% 
+vol_sort2 <- 
+  vol_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
 # t-tests
 for(i in 1:5){
-  print(t.test(vol_data2$ret_portf[vol_data2$quantiles == i]))
+  print(t.test(vol_sort2$ret_portf[vol_sort2$quantiles == i]))
 }
 
 
+# hilo sorting 
+hilo_sort <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_hilo,5)) %>% 
+  select(date,coin,ret,quantiles)
+
+# summarize mean returns of quantile portfolios
+mean_ret_hilo <- 
+  hilo_sort %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>%
+  group_by(quantiles) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+hilo_sort2 <- 
+  hilo_sort %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(hilo_sort2$ret_portf[hilo_sort2$quantiles == i]))
+}
+
+
+# age sorting 
+
+age_sort <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_age,5)) %>% 
+  select(date,coin,ret,quantiles)
+
+# summarize mean returns of quantile portfolios
+mean_ret_age <- 
+  age_sort %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>%
+  group_by(quantiles) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+age_sort2 <- 
+  age_sort %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(age_sort2$ret_portf[age_sort2$quantiles == i]))
+}
 
 
 
@@ -682,7 +741,7 @@ X = cbind(crypto$volume,crypto$hilo,crypto$lag_ret,
           crypto$lag_ret2,crypto$lag_vol,crypto$mkt_ret,crypto$SMB,crypto$MOM)
 
 x = model.matrix(Y~X)
-lasso1 <- glmnet(x = X , y=Y , alpha = 1)
+lasso1 <- glmnet(x = X , y=R , alpha = 1)
 lasso2 <- cv.glmnet(as.matrix(x),Y,alpha=1)
 coef.glmnet(lasso1)
 as.matrix(coef(lasso1, lasso1$lambda.min))
