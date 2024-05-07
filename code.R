@@ -585,7 +585,7 @@ for(i in 1:5){
 
   
 ## momentum long short portfolio
-mom_sort <- 
+mom_sort1 <- 
   crypto %>% 
   group_by(date) %>% 
   mutate(quantiles = ntile(lag_ret,5)) %>% 
@@ -593,16 +593,16 @@ mom_sort <-
 
 
 # summarize mean returns of quantile portfolios
-mean_ret_mom <- 
-  mom_sort %>% 
+mean_ret_mom1 <- 
+  mom_sort1 %>% 
   group_by(date, quantiles) %>% 
   mutate(ret_portf = mean(ret)) %>%
   ungroup(date) %>% 
   summarise(mean= mean(ret_portf)) 
 
 
-mom_sort2 <- 
-  mom_sort %>% 
+mom_sort12 <- 
+  mom_sort1 %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
@@ -611,7 +611,36 @@ mom_sort2 <-
 
 # t-tests
 for(i in 1:5){
-  print(t.test(mom_sort2$ret_portf[mom_sort2$quantiles == i]))
+  print(t.test(mom_sort12$ret_portf[mom_sort12$quantiles == i]))
+}
+
+mom_sort2 <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_ret2,5)) %>% 
+  select(date,coin,ret,quantiles)
+
+
+# summarize mean returns of quantile portfolios
+mean_ret_mom2 <- 
+  mom_sort2 %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret)) %>%
+  ungroup(date) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+mom_sort22 <- 
+  mom_sort2 %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+
+
+# t-tests
+for(i in 1:5){
+  print(t.test(mom_sort22$ret_portf[mom_sort22$quantiles == i]))
 }
 
 
@@ -705,7 +734,6 @@ for(i in 1:5){
 
 
 # age sorting 
-
 age_sort <- 
   crypto %>% 
   group_by(date) %>% 
@@ -730,6 +758,34 @@ age_sort2 <-
 # t-tests
 for(i in 1:5){
   print(t.test(age_sort2$ret_portf[age_sort2$quantiles == i]))
+}
+
+
+#Price sorting 
+prc_sort <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_prc,5)) %>% 
+  select(date,coin,ret,quantiles)
+
+# summarize mean returns of quantile portfolios
+mean_ret_prc <- 
+  prc_sort %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>%
+  group_by(quantiles) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+prc_sort2 <- 
+  prc_sort %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(prc_sort2$ret_portf[prc_sort2$quantiles == i]))
 }
 
 
