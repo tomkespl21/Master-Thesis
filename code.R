@@ -792,15 +792,66 @@ for(i in 1:5){
 
 ##########  Lasso ############################
 
-Y = as.vector(crypto$ret)
-X = cbind(crypto$volume,crypto$hilo,crypto$lag_ret,
-          crypto$lag_ret2,crypto$lag_vol,crypto$mkt_ret,crypto$SMB,crypto$MOM)
 
-x = model.matrix(Y~X)
-lasso1 <- glmnet(x = X , y=R , alpha = 1)
-lasso2 <- cv.glmnet(as.matrix(x),Y,alpha=1)
-coef.glmnet(lasso1)
-as.matrix(coef(lasso1, lasso1$lambda.min))
+X = as.matrix(cbind(crypto$volume,crypto$hilo,crypto$lag_ret,
+          crypto$lag_ret2,crypto$lag_vol,crypto$mkt_ret,crypto$SMB,
+          crypto$MOM1, crypto$MOM2, crypto$YMO,crypto$prcvol,crypto$lag_ret3,
+          crypto$spx_ret,crypto$vix,crypto$GVZCLS,crypto$usbond_id,
+          crypto$T10Y2Y,crypto$DCOILBRENTEU,crypto$HML))
+
+lasso1 <- glmnet(x = X , y=Y , alpha = 1)
+lasso_cv <- cv.glmnet(x = X, y = Y,
+          ## type.measure: loss to use for cross-validation.
+          type.measure = "mse",
+          ## K = 10 is the default.
+          nfold = 10,
+          ## 'alpha = 1' is the lasso penalty, and 'alpha = 0' the ridge penalty.
+          alpha = 1)
+lasso_cv$lambda.min
+
+coef(lasso_cv, s = lasso_cv$lambda.min)
+
+# adaptive lasso 
+best_ridge_coef <- as.numeric(coef(lasso_cv, s = lasso_cv$lambda.min))[-1]
+lasso2 <-  glmnet(x = X, y = Y,
+                  ## type.measure: loss to use for cross-validation.
+                  ## 'alpha = 1' is the lasso penalty, and 'alpha = 0' the ridge penalty.
+                  alpha = 1,
+                  ##
+                  ## penalty.factor: Separate penalty factors can be applied to each
+                  ##           coefficient. This is a number that multiplies 'lambda' to
+                  ##           allow differential shrinkage. Can be 0 for some variables,
+                  ##           which implies no shrinkage, and that variable is always
+                  ##           included in the model. Default is 1 for all variables (and
+                  ##           implicitly infinity for variables listed in 'exclude'). Note:
+                  ##           the penalty factors are internally rescaled to sum to nvars,
+                  ##           and the lambda sequence will reflect this change.
+                  penalty.factor = 1 / abs(best_ridge_coef))
+plot(lasso2, xvar = "lambda")
+
+lasso2_cv <- cv.glmnet(x = X, y = Y,
+                        ## type.measure: loss to use for cross-validation.
+                        type.measure = "mse",
+                        ## K = 10 is the default.
+                        nfold = 10,
+                        ## 'alpha = 1' is the lasso penalty, and 'alpha = 0' the ridge penalty.
+                        alpha = 1,
+                        ##
+                        ## penalty.factor: Separate penalty factors can be applied to each
+                        ##           coefficient. This is a number that multiplies 'lambda' to
+                        ##           allow differential shrinkage. Can be 0 for some variables,
+                        ##           which implies no shrinkage, and that variable is always
+                        ##           included in the model. Default is 1 for all variables (and
+                        ##           implicitly infinity for variables listed in 'exclude'). Note:
+                        ##           the penalty factors are internally rescaled to sum to nvars,
+                        ##           and the lambda sequence will reflect this change.
+                        penalty.factor = 1 / abs(best_ridge_coef),
+                        ## prevalidated array is returned
+                        keep = TRUE)
+
+lasso2_cv$lambda.min
+
+coef(lasso2_cv, s = lasso2_cv$lambda.min)
 
 
 ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
