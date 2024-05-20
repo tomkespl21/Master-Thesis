@@ -14,6 +14,7 @@ library("envalysis")  # publishable graphs
 library("glmnet")     # lasso 
 library("pls")
 library("gridExtra")  # for multiplots
+library("stargazer")  # nice regression tables
  
 
 
@@ -21,10 +22,6 @@ library("gridExtra")  # for multiplots
 
 # load on data
 crypto <- as_tibble(read_excel("weekly_cryptos.xlsx")) 
-
-# change to date format
-# doesnt work for some reason (outputs a character)
-crypto$date <- ymd(crypto$date)
 
 
 # change commas to points: 
@@ -34,12 +31,14 @@ comma_to_point <- function(x){
 
 crypto[] <-  lapply(crypto,comma_to_point)
 
+
 # change to numeric:
-crypto[,3:8] <- lapply(crypto[,3:8],as.numeric)
+crypto[,3:9] <- lapply(crypto[,3:9],as.numeric)
 
 
 # check types: 
 lapply(crypto[], typeof)
+
 
 
 
@@ -50,23 +49,24 @@ crypto <-
   group_by(coin) %>% 
   mutate(lnret = log(close)-log(lag(close)),     # log returns 
          ret = (close - lag(close))/lag(close),  # weekly returns 
-         ret_sqr = ret^2,                        # return squared 
-         ret_abs = abs(ret),                     # |return| 
-         hilo = high - low,                      # daily highest ret - lowest ret 
-         prc  = log(close),                      # log(closing price)
-         prcvol = log(close * volume),            # obvious 
+         ret_sqr = ret^2,                        # volatility proxy return squared 
+         ret_abs = abs(ret),                     # volatility proxy |return| 
+         max_ret = (high - low)/low,             # daily max ret  
+         prc  = log(close),                      # logarithm of closing price
+         prcvol = log(close * volume),           # logarithm of closing price * volume 
          lag_ret = lag(ret),                     # ret last week
-         lag_ret2 = lag(lag_ret),                # ret 2 weeks ago
-         lag_ret3 = lag(lag_ret2),               # ret 3 weeks ago
+         lag_ret2 = lag(lag(ret)),                # ret 2 weeks ago
+         lag_ret3 = lag(lag(lag(ret))),               # ret 3 weeks ago
          lag_prc  = lag(prc)     ,               # log(prc) last week 
          lag_size = lag(marketCap),              # size last week
          lag_volume = lag(volume),               # volume last week
-         lag_retsq = lag(ret_sqr),
-         lag_hilo = lag(hilo),
-         lag_age = lag(age),
-         lag_prcvol = lag(prcvol))%>%              # approx. volatility last week
-  ungroup() %>% 
+         lag_retsq = lag(ret_sqr),               # return squared last week
+         lag_retabs = lag(ret_abs),              # absolute value of return last week
+         lag_max_ret = lag(max_ret),             # max return last week 
+         lag_age = lag(age),                     # age of coin last week 
+         lag_prcvol = lag(prcvol))%>%            # price * volume last week     
   na.omit()                                      # delete Na  
+
 
          
   
@@ -98,35 +98,14 @@ crypto <-
 crypto <- 
   crypto %>% 
   group_by(date) %>% 
-  mutate(market = sum(marketCap),     # proxy for marketcap
+  mutate(market = sum(marketCap),     # proxy since dont have all coins, but close enough 
          weight = marketCap/market,   # weight of each coin
          mkt_ret = sum(weight*ret),   # weekly market return
          ln_mkt_ret = sum(weight*lnret))
   
 
-# compute cumulative returns 
-# use the summability of log-returns
-btc <- crypto[crypto$coin=="BTC",]
-btc$cumret <- cumsum(btc$lnret)
-# compute btc share of the market
-btc$dominance <- btc$marketCap/btc$market
 
-
-
-eth <- crypto[crypto$coin=="ETH",]
-eth$cumret <- cumsum(eth$lnret)
-
-
-
-
-# create market variable
-mkt <- crypto[crypto$coin == "BTC",] # to get mkt once for all dates
-mkt$mkt_cumret <- cumsum(mkt$ln_mkt_ret)
-mkt$mkt_ret_sqr = mkt$mkt_ret^2
-mkt <- mkt[,c(1,27,29:32)]
-
-
-
+#### join macroeconomic variables for later tasks 
  
 
 # sp500 data for comparison  
@@ -231,6 +210,30 @@ crypto <- left_join(crypto,rf)
 crypto$ret_ex <- crypto$ret - crypto$rf_rate  
 
 
+### --> now we have dataframe crypto with that we will work 
+
+# compute cumulative returns 
+# use the summability of log-returns
+btc <- crypto[crypto$coin=="BTC",]
+btc$cumret <- cumsum(btc$lnret)
+
+# compute btc share of the market
+
+### make plot about bitcoin marketcap dominance if time allows 
+
+eth <- crypto[crypto$coin=="ETH",]
+eth$cumret <- cumsum(eth$lnret)
+
+
+
+
+# create market variable
+mkt <- crypto[crypto$coin == "BTC",] # to get mkt once for all dates
+mkt$mkt_cumret <- cumsum(mkt$ln_mkt_ret)
+mkt$mkt_ret_sqr = mkt$mkt_ret^2
+mkt <- mkt[,c(1,28,30,31,50,51)]
+
+
 
 ## moments of crypto market 
 mean_crypto <- mean(mkt$mkt_ret)
@@ -271,7 +274,14 @@ jarque.test(spx$spx_ret)
 
 
 
+
+
+
+
 ################# PLOTS ################################
+
+
+
 
 
 # histogram with normal distribution 
@@ -295,10 +305,9 @@ spx$btcret <- btc$cumret
 spx$mktret <- mkt$mkt_cumret
 
 ggplot(spx,aes(x=date))+
-  geom_line(aes(y=btcret,group =1L,color="btcret"),color="darkred")+
-  geom_line(aes(y=mktret,group =1L,color="mktret"),color="steelblue")+
-  geom_line(aes(y=spx_cumret,group =1L,color="spx_cumret"),color="chartreuse4")+
-  scale_color_manual(name = "Asset", values = c( "darkred",  "steelblue",  "chartreuse4"))+
+  geom_line(aes(y=btcret),color="darkred")+
+  geom_line(aes(y=mktret),color="steelblue")+
+  geom_line(aes(y=spx_cumret),color="chartreuse4")+
   labs(
     title = "Comparison Cumulative Returns",
     #subtitle = 
@@ -337,9 +346,136 @@ grid.arrange(p1,p2,p3,p4,ncol=2)
 
 
 
+############### Factor models ##################################
+
+# create Return matrix 
+R <- 
+  crypto %>% 
+  group_by(coin,date) %>% 
+  select(date,coin,ret_ex) %>% 
+  mutate(id = row_number()) %>% 
+  pivot_wider(names_from = coin,values_from = ret_ex) %>% 
+  filter(id == 1 ) 
+
+
+
+
+
+R <- as.matrix(R[,3:142])
+
+
+#### Building Factors 
+
+# Size Factor
+# sort coins into quantiles by size at time t (not lagged)
+
+SMB <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(marketCap,5)) %>% 
+  select(date,coin,ret,ret_ex,quantiles) %>% 
+  group_by(date,quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  group_by(date) %>% 
+  summarise(SMB = ret_portf[quantiles == 1] - ret_portf[quantiles == 5]) # long: small size ; short: large size
+  
+
+SMB$yield <- 1+SMB$SMB
+
+
+crypto <- left_join(crypto,SMB)
+
+
+
+# momentum factor lag 1 
+MOM <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_ret,5)) %>% 
+  select(date,coin,ret,quantiles) %>% 
+  group_by(date,quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles) %>% 
+  group_by(date) %>% 
+  summarise(MOM = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
+  
+
+crypto <- left_join(crypto,MOM)
+
+
+
+
+# Volume High minus low factor
+HML <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(volume,5)) %>% 
+  select(date,coin,ret,quantiles) %>% 
+  group_by(date,quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles) %>% 
+  group_by(date) %>% 
+  summarise(HML = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high volume ; short: low volume
+  
+
+crypto <- left_join(crypto,HML)
+
+
+# AGE Factor Young_Minus_OLD
+YMO <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(age,5)) %>% 
+  select(date,coin,ret,quantiles) %>% 
+  group_by(date,quantiles) %>% 
+  summarise(ret_portf = mean(ret)) %>% 
+  select(date,ret_portf,quantiles) %>% 
+  group_by(date) %>% 
+  summarise(YMO = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: young coins ; short: old coins
+  
+
+
+crypto <- left_join(crypto,YMO)
+
+
+# 1 Factor model (CAPM)
+
+reg1 <- lm(ret ~ mkt_ret,data = crypto)
+
+summary(reg1)
+
+
+# 3 Factor model: RET = MKT + SMB + MOM 
+
+
+reg2 <- lm(SMB~mkt_ret, data= crypto)
+summary(reg2)
+
+reg3 <- lm(MOM~mkt_ret , data = crypto)
+summary(reg3)
+
+reg4 <- lm(ret ~ mkt_ret + SMB + MOM  ,data = crypto)
+summary(reg4)
+
+
+
+
+# 5 Factor model: RET = MKT + SMB + MOM + AGE + VOLUME 
+
+reg5 <- lm(YMO ~ mkt_ret + SMB + MOM  ,data = crypto)
+summary(reg5)
+
+reg6 <- lm(HML ~ mkt_ret + SMB + MOM  ,data = crypto)
+summary(reg6)
+
+
+reg7 <- lm(ret ~ mkt_ret + SMB + MOM + YMO   ,data = crypto)
+summary(reg7)
+
 
 
 ####################### Fama Macbeth #########################################################
+
 
 
 # Routine computes FMB estimators with Shanken covariance matrix
@@ -422,133 +558,11 @@ FMB <- function(R,X, c){
   
 }
 
-
-# create Return matrix 
-R <- 
-  crypto %>% 
-  group_by(coin,date) %>% 
-  select(date,coin,excess) %>% 
-  mutate(id = row_number()) %>% 
-  pivot_wider(names_from = coin,values_from = ret_ex) %>% 
-  filter(id == 1 ) #%>% 
-  #mutate_all(funs(ifelse(is.na(.), 0, .)))
-  
-
-R <- as.matrix(R[,3:126])
-
-
-######## Cross sectional Building Factors ##################### 
-
-# compute size factor
-# sort coins into quantiles by size at time t (not lagged)
-size_t <- 
-  crypto %>% 
-  group_by(date) %>% 
-  mutate(quantiles = ntile(marketCap,5)) %>% 
-  select(date,coin,ret_ex,quantiles) %>% 
-  group_by(date,quantiles) %>% 
-  summarise(ret_portf = mean(ret_ex)) %>% 
-  select(date,ret_portf,quantiles)
-
-
-
-SMB <- 
-  size_t %>% 
-  group_by(date) %>% 
-  summarise(SMB = ret_portf[quantiles == 1] - ret_portf[quantiles == 5]) # long: small size ; short: large size
-
-crypto <- left_join(crypto,SMB)
-
-
-
-# momentum factor lag 1 
-momentum1 <- 
-  crypto %>% 
-  group_by(date) %>% 
-  mutate(quantiles = ntile(lag_ret,5)) %>% 
-  select(date,coin,ret,quantiles) %>% 
-  group_by(date,quantiles) %>% 
-  summarise(ret_portf = mean(ret)) %>% 
-  select(date,ret_portf,quantiles)
-
-
-# sort coins into quantiles by lagged size 
-MOM1 <- 
-  momentum1 %>% 
-  group_by(date) %>% 
-  summarise(MOM1 = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
-
-crypto <- left_join(crypto,MOM1)
-
-
-# momentum factor lag 2 
-momentum2 <- 
-  crypto %>% 
-  group_by(date) %>% 
-  mutate(quantiles = ntile(lag_ret2,5)) %>% 
-  select(date,coin,ret,quantiles) %>% 
-  group_by(date,quantiles) %>% 
-  summarise(ret_portf = mean(ret)) %>% 
-  select(date,ret_portf,quantiles)
-
-
-# sort coins into quantiles by lagged size 
-MOM2 <- 
-  momentum2 %>% 
-  group_by(date) %>% 
-  summarise(MOM2 = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high ret ; short: low ret
-
-crypto <- left_join(crypto,MOM2)
-
-
-# HILO volatiliy factor
-
-hilo_t <- 
-  crypto %>% 
-  group_by(date) %>% 
-  mutate(quantiles = ntile(hilo,5)) %>% 
-  select(date,coin,ret,quantiles) %>% 
-  group_by(date,quantiles) %>% 
-  summarise(ret_portf = mean(ret)) %>% 
-  select(date,ret_portf,quantiles)
-
-
-
-HML <- 
-  hilo_t %>% 
-  group_by(date) %>% 
-  summarise(HML = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high fluctuation ; short: low 
-
-crypto <- left_join(crypto,HML)
-
-
-# AGE Factor Young_Minus_OLD
-age_t <- 
-  crypto %>% 
-  group_by(date) %>% 
-  mutate(quantiles = ntile(age,5)) %>% 
-  select(date,coin,ret,quantiles) %>% 
-  group_by(date,quantiles) %>% 
-  summarise(ret_portf = mean(ret)) %>% 
-  select(date,ret_portf,quantiles)
-
-
-
-YMO <- 
-  age_t %>% 
-  group_by(date) %>% 
-  summarise(YMO = ret_portf[quantiles == 5] - ret_portf[quantiles == 1]) # long: high fluctuation ; short: low 
-
-crypto <- left_join(crypto,YMO)
-
-
-
-
+# factor matrix 
 X = as.matrix(cbind(SMB[,2],MOM1[,2],MOM2[,2],HML[,2],YMO[,2],mkt[,3]))
 
-
 # run Fama Macbeth regressions
-FMB(R[,1:17],X,0)
+FMB(R[,1:33],X,0)
 
 
 
@@ -985,27 +999,6 @@ ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
 
 
 
-
-############### Factor models ##################################
-
-
-# 1 Factor model (CAPM)
-
-reg1 <- lm(crypto$ret ~ crypto$market_return)
-
-summary(reg1)
-
-
-# 3 Factor model: RET = MKT + SMB + MOM 
-
-
-reg2 <- lm(ret ~ market_return + SMB + MOM  ,data = crypto)
-
-summary(reg2)
-  
-
-
-# 5 Factor model: RET = MKT + SMB + MOM + VOLATILITY + VOLUME 
 
 
 
