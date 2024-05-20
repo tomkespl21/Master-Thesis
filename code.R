@@ -477,7 +477,6 @@ summary(reg7)
 ####################### Fama Macbeth #########################################################
 
 
-
 # Routine computes FMB estimators with Shanken covariance matrix
 # R asset returns
 # X Factors
@@ -559,11 +558,16 @@ FMB <- function(R,X, c){
 }
 
 # factor matrix 
-X = as.matrix(cbind(SMB[,2],MOM1[,2],MOM2[,2],HML[,2],YMO[,2],mkt[,3]))
+X <-  as.matrix(cbind(SMB[,2],MOM[,2],HML[,2],YMO[,2],mkt[,3]))
+X1 <- X[-(1:30),]
+
+R[is.na(R)] <- 0
+
+R1 <- R[-(1:30),]
 
 # run Fama Macbeth regressions
-FMB(R[,1:33],X,0)
-
+FMB(R1[,1:36],X1,0)
+FMB(R,X,0)
 
 
 
@@ -728,6 +732,45 @@ for(i in 1:5){
 
 t.test(mom2_longshort$longshort)
 
+# momentum 3 weeks
+mom_sort3 <- 
+  crypto %>% 
+  group_by(date) %>% 
+  mutate(quantiles = ntile(lag_ret3,5)) %>% 
+  select(date,coin,ret_ex,quantiles)
+
+
+# summarize mean returns of quantile portfolios
+mean_ret_mom3 <- 
+  mom_sort2 %>% 
+  group_by(date, quantiles) %>% 
+  mutate(ret_portf = mean(ret_ex)) %>%
+  ungroup(date) %>% 
+  summarise(mean= mean(ret_portf)) 
+
+
+mom_sort33 <- 
+  mom_sort3 %>% 
+  group_by(date, quantiles) %>% 
+  summarise(ret_portf = mean(ret_ex)) %>% 
+  select(date,ret_portf,quantiles)
+
+mom3_longshort <- 
+  mom_sort33 %>% 
+  group_by(date) %>% 
+  summarise(longshort = ret_portf[quantiles == 5]-
+              ret_portf[quantiles == 1])
+
+mean(mom3_longshort$longshort)
+
+# t-tests
+for(i in 1:5){
+  print(t.test(mom_sort33$ret_portf[mom_sort33$quantiles == i]))
+}
+
+t.test(mom3_longshort$longshort)
+
+
 
 ## volume factors
 # sort coins into quantiles by lagged size 
@@ -841,39 +884,39 @@ for(i in 1:5){
 t.test(retsq_longshort$longshort)
 
 
-# hilo sorting 
-hilo_sort <- 
+# max_ret sorting 
+maxret_sort <- 
   crypto %>% 
   group_by(date) %>% 
-  mutate(quantiles = ntile(lag_hilo,5)) %>% 
+  mutate(quantiles = ntile(lag_max_ret,5)) %>% 
   select(date,coin,ret,quantiles)
 
 # summarize mean returns of quantile portfolios
-mean_ret_hilo <- 
-  hilo_sort %>% 
+mean_ret_maxret <- 
+  maxret_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>%
   group_by(quantiles) %>% 
   summarise(mean= mean(ret_portf)) 
 
 
-hilo_sort2 <- 
-  hilo_sort %>% 
+maxret_sort2 <- 
+  maxret_sort %>% 
   group_by(date, quantiles) %>% 
   summarise(ret_portf = mean(ret)) %>% 
   select(date,ret_portf,quantiles)
 
-hilo_longshort <- 
-  hilo_sort2 %>% 
+maxret_longshort <- 
+  maxret_sort2 %>% 
   group_by(date) %>% 
   summarise(longshort = ret_portf[quantiles == 5]-
               ret_portf[quantiles == 1])
 
 # t-tests
 for(i in 1:5){
-  print(t.test(hilo_sort2$ret_portf[hilo_sort2$quantiles == i]))
+  print(t.test(maxret_sort2$ret_portf[maxret_sort2$quantiles == i]))
 }
-t.test(hilo_longshort$longshort)
+t.test(maxret_longshort$longshort)
 
 # age sorting 
 age_sort <- 
@@ -920,11 +963,13 @@ t.test(age_longshort$longshort)
 ##########  Lasso ############################
 
 
-X = as.matrix(cbind(crypto$volume,crypto$hilo,crypto$lag_ret,
-          crypto$lag_ret2,crypto$lag_vol,crypto$mkt_ret,crypto$SMB,
-          crypto$MOM1, crypto$MOM2, crypto$YMO,crypto$prcvol,crypto$lag_ret3,
+X = as.matrix(cbind(crypto$volume,crypto$max_ret,crypto$lag_ret,
+          crypto$lag_ret2,crypto$lag_volume,crypto$mkt_ret,crypto$SMB,
+          crypto$MOM,  crypto$YMO,crypto$prcvol,crypto$lag_ret3,
           crypto$spx_ret,crypto$vix,crypto$GVZCLS,crypto$usbond_id,
           crypto$T10Y2Y,crypto$DCOILBRENTEU,crypto$HML))
+
+Y <- crypto$ret_ex
 
 lasso1 <- glmnet(x = X , y=Y , alpha = 1)
 lasso_cv <- cv.glmnet(x = X, y = Y,
@@ -981,18 +1026,6 @@ lasso2_cv$lambda.min
 coef(lasso2_cv, s = lasso2_cv$lambda.min)
 
 
-ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
-  x<-model.matrix(as.formula(paste(yvar,"~.")),data=df)
-  x=x[,-1] ##remove intercept
-  
-  glmnet1<-glmnet::cv.glmnet(x=x,y=df[,yvar],type.measure='mse',nfolds=folds,alpha=alpha)
-  
-  co<-coef(glmnet1,s = "lambda.1se")
-  inds<-which(co!=0)
-  variables<-row.names(co)[inds]
-  variables<-variables[!(variables %in% '(Intercept)')];
-  return( c(yvar,variables));
-}
 
 
 
@@ -1005,14 +1038,14 @@ ezlasso=function(df,yvar,folds=10,trace=F,alpha=1){
 ############## Principal Component Regression ################
 
 
-returns.pca <- prcomp(Y, center = TRUE, scale. = TRUE)
+returns.pca <- prcomp(R, center = TRUE, scale. = TRUE)
 summary(returns.pca)
 pcafactors <- as.matrix(returns.pca$x)
 
 #print(cor(DOL,pcafactors[,1]))
 #print(cor(HML,pcafactors[,2]))
 
-pcr_model <- pcr(Y~X,scale=T, validation = "CV")
+pcr_model <- pcr(R~X,scale=T, validation = "CV")
 
 lm(X~pcafactors[1:5])
 
