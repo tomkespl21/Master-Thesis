@@ -12,7 +12,7 @@ library("readxl")     # self explanatory
 library("moments")    # self explanatory
 library("envalysis")  # publishable graphs 
 library("glmnet")     # lasso 
-library("pls")
+library("pls")        # pca regression and plots
 library("gridExtra")  # for multiplots
 library("stargazer")  # nice regression tables
  
@@ -55,8 +55,8 @@ crypto <-
          prc  = log(close),                      # logarithm of closing price
          prcvol = log(close * volume),           # logarithm of closing price * volume 
          lag_ret = lag(ret),                     # ret last week
-         lag_ret2 = lag(lag(ret)),                # ret 2 weeks ago
-         lag_ret3 = lag(lag(lag(ret))),               # ret 3 weeks ago
+         lag_ret2 = lag(lag(ret)),               # ret 2 weeks ago
+         lag_ret3 = lag(lag(lag(ret))),          # ret 3 weeks ago
          lag_prc  = lag(prc)     ,               # log(prc) last week 
          lag_size = lag(marketCap),              # size last week
          lag_volume = lag(volume),               # volume last week
@@ -64,7 +64,8 @@ crypto <-
          lag_retabs = lag(ret_abs),              # absolute value of return last week
          lag_max_ret = lag(max_ret),             # max return last week 
          lag_age = lag(age),                     # age of coin last week 
-         lag_prcvol = lag(prcvol))%>%            # price * volume last week     
+         lag_prcvol = lag(prcvol))%>%            # price * volume last week
+  filter(volume > 0)       %>%                   # remove rows with zero volume because bad price making 
   na.omit()                                      # delete Na  
 
 
@@ -210,20 +211,12 @@ crypto <- left_join(crypto,rf)
 crypto$ret_ex <- crypto$ret - crypto$rf_rate  
 
 
-### --> now we have dataframe crypto with that we will work 
+
 
 # compute cumulative returns 
 # use the summability of log-returns
 btc <- crypto[crypto$coin=="BTC",]
 btc$cumret <- cumsum(btc$lnret)
-
-# compute btc share of the market
-
-### make plot about bitcoin marketcap dominance if time allows 
-
-eth <- crypto[crypto$coin=="ETH",]
-eth$cumret <- cumsum(eth$lnret)
-
 
 
 
@@ -232,7 +225,6 @@ mkt <- crypto[crypto$coin == "BTC",] # to get mkt once for all dates
 mkt$mkt_cumret <- cumsum(mkt$ln_mkt_ret)
 mkt$mkt_ret_sqr = mkt$mkt_ret^2
 mkt <- mkt[,c(1,28,30,31,50,51)]
-
 
 
 ## moments of crypto market 
@@ -273,7 +265,8 @@ jarque.test(eth$ret)
 jarque.test(spx$spx_ret)
 
 
-
+### --> now we have dataframe crypto with that we will work 
+save(crypto,file = "data.Rda")
 
 
 
@@ -366,7 +359,7 @@ R <- as.matrix(R[,3:142])
 
 #### Building Factors 
 
-# Size Factor
+## Size Factor
 # sort coins into quantiles by size at time t (not lagged)
 
 SMB <- 
@@ -375,19 +368,29 @@ SMB <-
   mutate(quantiles = ntile(marketCap,5)) %>% 
   select(date,coin,ret,ret_ex,quantiles) %>% 
   group_by(date,quantiles) %>% 
-  summarise(ret_portf = mean(ret)) %>% 
+  summarise(ret_portf = mean(ret_ex)) %>% 
   group_by(date) %>% 
   summarise(SMB = ret_portf[quantiles == 1] - ret_portf[quantiles == 5]) # long: small size ; short: large size
   
-
-SMB$yield <- 1+SMB$SMB
-
-
+# join SMB factor to data set
 crypto <- left_join(crypto,SMB)
 
 
+# compute 
+SMB$yield_ex <- 1+SMB$SMB 
 
-# momentum factor lag 1 
+length(SMB$SMB[SMB$SMB >0])/length(SMB$SMB)
+
+# Compute cumulative returns of SMB strategy
+SMB_cumret = c(1)  
+for(i in 2:466){
+  SMB_cumret[i] = SMB_cumret[i-1] * SMB$yield_ex[i-1] 
+}
+
+
+
+
+# momentum  
 MOM <- 
   crypto %>% 
   group_by(date) %>% 
@@ -402,6 +405,16 @@ MOM <-
 
 crypto <- left_join(crypto,MOM)
 
+# compute 
+MOM$yield_ex <- 1+MOM$MOM 
+
+length(MOM$MOM[MOM$MOM >0])/length(MOM$MOM)
+
+# Compute cumulative returns of SMB strategy
+MOM_cumret = c(1) 
+for(i in 2:466){
+  MOM_cumret[i] = MOM_cumret[i-1] * MOM$yield_ex[i-1] 
+}
 
 
 
@@ -969,9 +982,15 @@ X = as.matrix(cbind(crypto$volume,crypto$max_ret,crypto$lag_ret,
           crypto$spx_ret,crypto$vix,crypto$GVZCLS,crypto$usbond_id,
           crypto$T10Y2Y,crypto$DCOILBRENTEU,crypto$HML))
 
+
+
 Y <- crypto$ret_ex
 
 lasso1 <- glmnet(x = X , y=Y , alpha = 1)
+
+plot(lasso1)
+print(lasso1)
+
 lasso_cv <- cv.glmnet(x = X, y = Y,
           ## type.measure: loss to use for cross-validation.
           type.measure = "mse",
@@ -980,6 +999,8 @@ lasso_cv <- cv.glmnet(x = X, y = Y,
           ## 'alpha = 1' is the lasso penalty, and 'alpha = 0' the ridge penalty.
           alpha = 1)
 lasso_cv$lambda.min
+
+
 
 coef(lasso_cv, s = lasso_cv$lambda.min)
 
@@ -1038,14 +1059,18 @@ coef(lasso2_cv, s = lasso2_cv$lambda.min)
 ############## Principal Component Regression ################
 
 
-returns.pca <- prcomp(R, center = TRUE, scale. = TRUE)
+returns.pca <- prcomp(X, center = TRUE, scale. = TRUE)
 summary(returns.pca)
 pcafactors <- as.matrix(returns.pca$x)
+pcafactors <- pcafactors[,1:3]
 
-#print(cor(DOL,pcafactors[,1]))
+reg8 <- lm(crypto$ret ~ pcafactors)
+summary(reg8)
+
+#print(cor(SMB,pcafactors[,1]))
 #print(cor(HML,pcafactors[,2]))
 
-pcr_model <- pcr(R~X,scale=T, validation = "CV")
+pcr_model <- pcr(crypto$ret~X,scale=T, validation = "CV")
 
 lm(X~pcafactors[1:5])
 
@@ -1053,7 +1078,7 @@ lm(X~pcafactors[1:5])
 summary(pcr_model)
 
 
-prcomp(R,center = T, scale. = T)
+prcomp(X,center = T, scale. = T)
 
 
 
