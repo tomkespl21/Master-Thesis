@@ -1,3 +1,7 @@
+##############################################################
+##################### Data ###################################
+##############################################################
+
 rm(list=ls())
 
 # libraries 
@@ -87,6 +91,57 @@ crypto %>%
   nrow()
 
 
+# compute mean/median for 2015 
+mktcap15 <- 
+  crypto %>% 
+  filter(date =="2015-12-28") 
+
+mean(mktcap15$marketCap)
+median(mktcap15$marketCap)
+mean(mktcap15$volume)
+median(mktcap15$volume) 
+
+# compute mean/median for 2017
+mktcap17 <- 
+  crypto %>% 
+  filter(date =="2017-12-25") 
+
+mean(mktcap17$marketCap)
+median(mktcap17$marketCap)
+mean(mktcap17$volume)
+median(mktcap17$volume)
+
+
+# compute mean/median for 2019
+mktcap19 <- 
+  crypto %>% 
+  filter(date =="2019-12-30") 
+
+mean(mktcap19$marketCap)
+median(mktcap19$marketCap)
+mean(mktcap19$volume)
+median(mktcap19$volume)
+
+
+# compute mean/median for 2021
+mktcap21 <- 
+  crypto %>% 
+  filter(date =="2021-12-27") 
+
+mean(mktcap21$marketCap)
+median(mktcap21$marketCap)
+mean(mktcap21$volume)
+median(mktcap21$volume)
+
+# compute mean/median for 2023
+mktcap23 <- 
+  crypto %>% 
+  filter(date =="2023-12-25") 
+
+mean(mktcap23$marketCap)
+median(mktcap23$marketCap)
+mean(mktcap23$volume)
+median(mktcap23$volume)
 
 
 # compute market returns per date 
@@ -152,7 +207,7 @@ infl <- as.tibble(read_excel("5year_breakeven_inflationrate.xls",
 infl <- 
   infl %>% 
   fill(T5YIE) %>% 
-  mutate(infl_lag = lag(infl))
+  mutate(infl_lag = lag(T5YIE))
 infl$date <- as.character(infl$date)
 
 crypto <- left_join(crypto,infl)
@@ -164,7 +219,7 @@ yielddiff <- as.tibble(read_excel("10Y_vs_2Y.xls",col_names = T))
 yielddiff <- 
   yielddiff %>% 
   fill(T10Y2Y) %>% 
-  mutate(yielddiff_lag = lag(yielddiff))
+  mutate(yielddiff_lag = lag(T10Y2Y))
 yielddiff$date = as.character(yielddiff$date)
 
 crypto <- left_join(crypto,yielddiff)
@@ -178,7 +233,7 @@ oil <- as.tibble(read_excel("oil.xls",col_names = T))
 oil <- 
   oil %>% 
   fill(DCOILBRENTEU) %>% 
-  mutate(oil_lag = lag(oil))
+  mutate(oil_lag = lag(DCOILBRENTEU))
 oil$date <- as.character(oil$date)
 
 crypto <- left_join(crypto,oil)
@@ -224,21 +279,32 @@ mkt$mkt_ret_sqr = mkt$mkt_ret^2
 
 ## moments of crypto market 
 mean_crypto <- mean(mkt$mkt_ret)
+median_crypto <- median(mkt$mkt_ret)
 sd_crypto   <- sd(mkt$mkt_ret)
 skew_crypto <- skewness(mkt$mkt_ret)
 kurt_crypto <- kurtosis(mkt$mkt_ret)
 
+
 ## moments sp500
 mean_sp <- mean(spx$spx_ret)
+median_sp <- median(spx$spx_ret)
 sd_sp   <- sd(spx$spx_ret)
 skew_sp <- skewness(spx$spx_ret)
 kurt_sp <- kurtosis(spx$spx_ret)
 
 ## moments bitcoin 
 mean_btc <- mean(btc$ret)
+median_btc <- median(btc$ret)
 sd_btc   <- sd(btc$ret)
 skew_btc <- skewness(btc$ret)
 kurt_btc <- kurtosis(btc$ret)
+
+## moments eth
+mean_eth <- mean(eth$ret)
+median_eth <- median(eth$ret)
+sd_eth   <- sd(eth$ret)
+skew_eth <- skewness(eth$ret)
+kurt_eth <- kurtosis(eth$ret)
 
 
 ## agostino test for skewness 
